@@ -1,0 +1,51 @@
+import os
+import csv
+import requests
+
+# Chargement des variables d'environnement
+KIMAI_URL = os.getenv("KIMAI_URL")
+API_TOKEN = os.getenv("KIMAI_API_TOKEN")
+
+if not KIMAI_URL or not API_TOKEN:
+    raise ValueError("Les variables d'environnement KIMAI_URL et KIMAI_API_TOKEN doivent être définies.")
+
+HEADERS = {"Authorization": f"Bearer {API_TOKEN}", "Accept": "application/json"}
+
+def api_request(method, endpoint, payload=None):
+    """Envoie une requête API et affiche les erreurs éventuelles"""
+    url = f"{KIMAI_URL}/{endpoint}"
+    response = requests.request(method, url, json=payload, headers=HEADERS)
+    if response.status_code not in [200, 201]:
+        print(f"⚠️ ERREUR API ({method} {endpoint}) : {response.status_code} - {response.text}")
+    return response.json() if response.status_code in [200, 201] else {}
+
+def get_clients():
+    return {c["name"]: c["id"] for c in api_request("GET", "customers")}
+
+def create_client(name):
+    """Crée un client avec des valeurs par défaut si nécessaire"""
+    payload = {
+        "name": name,
+        "country": "FR",  # Pays par défaut (France)
+        "currency": "EUR",  # Devise par défaut (Euro)
+        "timezone": "Europe/Paris"  # Fuseau horaire par défaut
+    }
+    return api_request("POST", "customers", payload).get("id")
+
+def process_csv(file_path):
+    """Lit le CSV et crée les objets nécessaires avec logs"""
+    clients = get_clients()
+
+    with open(file_path, newline="", encoding="utf-8") as csvfile:
+        reader = csv.DictReader(csvfile)
+        for row in reader:
+            client_name = row["CLIENT"]
+
+            # Vérification & création du client
+            client_id = clients.get(client_name) or create_client(client_name)
+            if client_id:
+                clients[client_name] = client_id
+            print(f"✅ Client '{client_name}' -> ID: {client_id}")
+
+if __name__ == "__main__":
+    process_csv("data.csv")  # Remplacez par le chemin du fichier CSV à traiter
